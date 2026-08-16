@@ -80,7 +80,7 @@ if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   
   // SPA fallback
-  app.get('(.*)', (req, res) => {
+  app.get('/*splat', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
