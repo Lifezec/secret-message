@@ -1,0 +1,20 @@
+# Dependency directories
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Production build outputs
+client/dist/
+
+# Local databases and user uploads
+server/database.json
+server/uploads/
+
+# OS metadata files
+.DS_Store
+Thumbs.db
+
+# Environmental variables
+.env
+.env.local
+.env.*.local
