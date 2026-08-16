@@ -22,13 +22,14 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => 
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isLogin, setIsLogin] = useState(false);
 
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     // Form validation
-    if (!username.trim() || !password || !confirmPassword) {
+    if (!username.trim() || !password || (!isLogin && !confirmPassword)) {
       setError('Lütfen tüm alanları doldurun.');
       return;
     }
@@ -43,7 +44,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => 
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (!isLogin && password !== confirmPassword) {
       setError('Şifreler eşleşmiyor.');
       return;
     }
@@ -53,14 +54,22 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => 
     try {
       const cleanUsername = username.trim().toLowerCase();
 
-      // 1. Check if username is already taken on the server
+      // 1. Check if username is already taken / exists on the server
       const checkRes = await fetch(`${API_BASE_URL}/api/users/exists/${cleanUsername}`);
       const checkData = await checkRes.json();
 
-      if (checkData.exists) {
-        setError('Bu kullanıcı adı başka biri tarafından alınmış.');
-        setLoading(false);
-        return;
+      if (isLogin) {
+        if (!checkData.exists) {
+          setError('Kullanıcı bulunamadı. Lütfen kaydolun.');
+          setLoading(false);
+          return;
+        }
+      } else {
+        if (checkData.exists) {
+          setError('Bu kullanıcı adı başka biri tarafından alınmış.');
+          setLoading(false);
+          return;
+        }
       }
 
       // 2. Generate Cryptographic Keys
@@ -93,8 +102,9 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => 
         oneTimePrePubsForServer.push(opkPubJWK);
       }
 
-      // 3. Register Public Keys on Backend
-      const regRes = await fetch(`${API_BASE_URL}/api/register`, {
+      // 3. Register or Login on Backend
+      const endpoint = isLogin ? `${API_BASE_URL}/api/register/login` : `${API_BASE_URL}/api/register`;
+      const regRes = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -108,7 +118,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => 
 
       if (!regRes.ok) {
         const regData = await regRes.json();
-        throw new Error(regData.error || 'Sunucu kayıt hatası');
+        throw new Error(regData.error || (isLogin ? 'Giriş hatası' : 'Sunucu kayıt hatası'));
       }
 
       // 4. Encrypt Private Keys locally using master password
@@ -157,7 +167,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => 
       onSetupComplete(unlockedKeys);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Bir hata oluştu, kurulum başarısız.');
+      setError(err.message || 'Bir hata oluştu, işlem başarısız.');
     } finally {
       setLoading(false);
     }
@@ -179,9 +189,13 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => 
         }}>
           <KeyRound size={32} color="#8b5cf6" />
         </div>
-        <h2 style={{ margin: '0 0 8px 0', fontSize: '1.8rem', fontWeight: 700 }}>R6V2 Güvenli Kurulum</h2>
+        <h2 style={{ margin: '0 0 8px 0', fontSize: '1.8rem', fontWeight: 700 }}>
+          {isLogin ? 'R6V2 Güvenli Giriş' : 'R6V2 Güvenli Kurulum'}
+        </h2>
         <p style={{ margin: 0, color: '#a1a1aa', fontSize: '0.95rem' }}>
-          Yeni bir kriptografik kimlik oluşturun ve sunucuya kaydolun.
+          {isLogin 
+            ? 'Kayıtlı hesabınıza bağlanın ve yeni oturum anahtarları oluşturun.'
+            : 'Yeni bir kriptografik kimlik oluşturun ve sunucuya kaydolun.'}
         </p>
       </div>
 
@@ -209,16 +223,18 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => 
           />
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#a1a1aa' }}>Şifre Onayı</label>
-          <input
-            type="password"
-            placeholder="Şifreyi tekrar girin"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            disabled={loading}
-          />
-        </div>
+        {!isLogin && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#a1a1aa' }}>Şifre Onayı</label>
+            <input
+              type="password"
+              placeholder="Şifreyi tekrar girin"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={loading}
+            />
+          </div>
+        )}
 
         {error && (
           <div style={{
@@ -238,9 +254,38 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => 
         )}
 
         <button type="submit" className="primary" disabled={loading}>
-          {loading ? 'Kripto Anahtarlar Üretiliyor...' : 'Kurulumu Başlat'}
+          {loading 
+            ? 'Kripto Anahtarlar Üretiliyor...' 
+            : (isLogin ? 'Giriş Yap' : 'Kurulumu Başlat')}
         </button>
       </form>
+
+      <div style={{ textAlign: 'center', marginTop: '20px' }}>
+        <button 
+          type="button" 
+          onClick={() => {
+            setIsLogin(!isLogin);
+            setError('');
+            setUsername('');
+            setPassword('');
+            setConfirmPassword('');
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#8b5cf6',
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+            textDecoration: 'underline',
+            padding: '8px'
+          }}
+        >
+          {isLogin 
+            ? "Hesabınız yok mu? Yeni Hesap Oluşturun" 
+            : "Zaten bir hesabınız var mı? Giriş Yapın"}
+        </button>
+      </div>
+
       <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '0.75rem', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         R6V2 Secure Messaging Architecture
       </div>

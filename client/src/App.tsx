@@ -305,10 +305,48 @@ function App() {
 
       await saveMessage(localMsg);
       console.log(`Saved decrypted message from ${sender} under room ${localMsg.roomId}`);
+
+      // Play bubble chime notification sound
+      playNotificationSound();
+
+      // Dispatch custom event for instantaneous UI update in ChatScreen
+      window.dispatchEvent(new CustomEvent('new-message-received', { detail: localMsg }));
     } catch (err) {
       console.error("Failed to decrypt received WebSocket message:", err);
     }
   };
+
+  // Helper to play a clean synthesizer chime
+  function playNotificationSound() {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      
+      const ctx = new AudioContextClass();
+      const playTone = (time: number, freq: number, duration: number) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, time);
+        
+        gainNode.gain.setValueAtTime(0.12, time);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, time + duration);
+        
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        osc.start(time);
+        osc.stop(time + duration);
+      };
+
+      const now = ctx.currentTime;
+      playTone(now, 587.33, 0.12);    // D5 note
+      playTone(now + 0.08, 880.00, 0.20); // A5 note
+    } catch (error) {
+      console.warn("Could not play notification sound:", error);
+    }
+  }
 
   // 4. Connect WebSocket when keys are unlocked
   useEffect(() => {

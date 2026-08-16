@@ -49,9 +49,25 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
     loadMessages();
     loadRoomDetails();
 
-    // Poll message DB for updates (e.g. from websocket events)
+    // Listen for incoming WebSocket messages dispatched from App.tsx for instantaneous sync
+    const handleNewMessage = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const msg = customEvent.detail;
+      // If the incoming message belongs to this chat room, reload instantly!
+      if (msg && msg.roomId === chatId) {
+        loadMessages();
+      }
+    };
+
+    window.addEventListener('new-message-received', handleNewMessage);
+
+    // Poll message DB for updates (e.g. from websocket events) as a robust backup fallback
     const interval = setInterval(loadMessages, 1000);
-    return () => clearInterval(interval);
+
+    return () => {
+      window.removeEventListener('new-message-received', handleNewMessage);
+      clearInterval(interval);
+    };
   }, [chatId]);
 
   useEffect(() => {
