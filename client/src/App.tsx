@@ -59,6 +59,31 @@ const normalizeString = (str: string): string => {
     .replace(/ö/g, 'o');
 };
 
+let sharedAudioContext: AudioContext | null = null;
+
+const initAudioContext = () => {
+  if (sharedAudioContext) return;
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioContextClass) {
+      sharedAudioContext = new AudioContextClass();
+    }
+  } catch (e) {
+    console.warn("Failed to create shared AudioContext:", e);
+  }
+};
+
+if (typeof window !== 'undefined') {
+  const handleInteraction = () => {
+    initAudioContext();
+    if (sharedAudioContext && sharedAudioContext.state === 'suspended') {
+      sharedAudioContext.resume().catch(e => console.warn(e));
+    }
+  };
+  window.addEventListener('click', handleInteraction);
+  window.addEventListener('keydown', handleInteraction);
+}
+
 function App() {
   const [screen, setScreen] = useState<ScreenState>('weather');
   const [unlockedKeys, setUnlockedKeys] = useState<UserKeys | null>(null);
@@ -319,10 +344,17 @@ function App() {
   // Helper to play a clean synthesizer chime
   function playNotificationSound() {
     try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextClass) return;
+      if (!sharedAudioContext) {
+        initAudioContext();
+      }
       
-      const ctx = new AudioContextClass();
+      const ctx = sharedAudioContext;
+      if (!ctx) return;
+      
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(e => console.warn(e));
+      }
+
       const playTone = (time: number, freq: number, duration: number) => {
         const osc = ctx.createOscillator();
         const gainNode = ctx.createGain();
